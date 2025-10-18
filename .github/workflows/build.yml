@@ -6,72 +6,40 @@ on:
       - 'v*'
     branches:
       - main
-      - develop
-  pull_request:
-    branches:
-      - main
 
 jobs:
-  build-windows:
+  windows:
     runs-on: windows-latest
 
     steps:
-      # Checkout du code
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v2
 
-      # Installation de Flutter
-      - name: Install Flutter
-        uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.35.6'
           channel: 'stable'
+          flutter-version: '3.35.6'
 
-      # Configuration Windows
-      - name: Enable Windows desktop support
-        run: flutter config --enable-windows-desktop
+      - run: flutter config --enable-windows-desktop
 
-      # Récupérer les dépendances
-      - name: Get dependencies
-        run: flutter pub get
+      - run: flutter create .
 
-      # Analyser le code
-      - name: Analyze code
-        run: flutter analyze
+      - run: flutter pub get
 
-      # Builder l'exe
-      - name: Build Windows app
-        run: flutter build windows --release
+      - run: flutter build windows --release
 
-      # Debug - Lister les fichiers générés
-      - name: List build files
+      - name: List files to debug
         run: |
-          dir build
-          dir build/windows
-          dir build/windows/x64
-          dir build/windows/x64/runner
+          dir build\windows\x64
+          dir build\windows\x64\runner
 
-      # Upload artifact
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: flutter-windows-build
-          path: build/windows/runner/Release/gestion_web.exe
+          name: windows
+          path: build\windows\x64\runner\Release
 
-      # Copier l'exe pour la release
-      - name: Copy exe for release
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          mkdir release-files
-          copy "build\windows\x64\Release\gestion_web.exe" "release-files\gestion_web.exe"
-          dir release-files
-
-      # Créer une release (si c'est un tag)
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: release-files/gestion_web.exe
-          draft: false
-          prerelease: false
+          files: build\windows\x64\runner\Release\**\*.exe
           token: ${{ secrets.GITHUB_TOKEN }}
