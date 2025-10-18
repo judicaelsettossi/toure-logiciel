@@ -1,7 +1,10 @@
+// ignore_for_file: unused_element
+
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:async';
+import 'dart:io' show Platform;
 
 void main() {
   runApp(const MyApp());
@@ -32,100 +35,173 @@ class _WebViewPageState extends State<WebViewPage> {
   late StreamSubscription<ConnectivityResult> _connectivitySubscription;
   bool _isInitialized = false;
   bool _isLoading = false;
+  bool _isConnected = false;
 
-  // URL de votre application web
   static const String webUrl = 'https://toure-logiciel.gestiem.com/';
 
   @override
   void initState() {
     super.initState();
+    _init();
+  }
 
-    // Initialiser WebView
-    _initializeWebView();
+  Future<void> _init() async {
+    try {
+      // Étape 1: Initialiser le WebViewController
+      await _initializeWebView();
 
-    // Vérifier la connexion initiale
-    _checkInitialConnection();
+      // Étape 2: Vérifier la connexion initiale
+      if (mounted) {
+        await _checkInitialConnection();
+      }
 
-    // Écouter les changements de connexion
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
-      ConnectivityResult result,
-    ) {
-      _handleConnectivityChange(result);
-    });
+      // Étape 3: Écouter les changements de connexion (sauf Windows)
+      if (mounted && !Platform.isWindows) {
+        _connectivitySubscription = Connectivity().onConnectivityChanged.listen(
+          (ConnectivityResult result) {
+            _handleConnectivityChange(result);
+          },
+        );
+      } else if (mounted && Platform.isWindows) {
+        // Sur Windows, faire une vérification périodique
+        _startPeriodicConnectivityCheck();
+      }
+    } catch (e) {
+      debugPrint('Erreur lors de l\'initialisation: $e');
+      if (mounted) {
+        _showErrorPage('Erreur lors de l\'initialisation: $e');
+      }
+    }
   }
 
   Future<void> _initializeWebView() async {
     _webViewController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setUserAgent(
-        'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+        Platform.isWindows
+            ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            : 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
       )
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (String url) {
-            debugPrint('Page started: $url');
-            setState(() {
-              _isLoading = true;
-            });
+            debugPrint('📄 Page started: $url');
+            if (mounted) {
+              setState(() {
+                _isLoading = true;
+              });
+            }
           },
           onPageFinished: (String url) {
-            debugPrint('Page finished: $url');
-            setState(() {
-              _isLoading = false;
-            });
+            debugPrint('✓ Page finished: $url');
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+              });
+            }
           },
           onWebResourceError: (WebResourceError error) {
-            debugPrint('Web resource error: ${error.description}');
-            setState(() {
-              _isLoading = false;
-            });
-            // Vérifier si c'est une erreur de réseau
-            if (error.errorCode == -2 || error.errorCode == -6) {
-              _showNoInternetPage();
+            debugPrint(
+              '❌ Web resource error: ${error.description} (code: ${error.errorCode})',
+            );
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+              });
+            }
+
+            // Erreurs réseau
+            if (error.errorCode == -2 ||
+                error.errorCode == -6 ||
+                error.errorCode == -1 ||
+                error.description.contains('net::ERR_INTERNET_DISCONNECTED') ||
+                error.description.contains('net::ERR_NAME_NOT_RESOLVED')) {
+              if (mounted) {
+                _showNoInternetPage();
+              }
             } else {
-              _showErrorPage(error.description);
+              if (mounted) {
+                _showErrorPage(error.description);
+              }
             }
           },
           onNavigationRequest: (NavigationRequest request) {
-            debugPrint('Navigation request: ${request.url}');
+            debugPrint('🔗 Navigation request: ${request.url}');
             return NavigationDecision.navigate;
           },
         ),
       );
 
-    setState(() {
-      _isInitialized = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isInitialized = true;
+      });
+    }
   }
 
   Future<void> _checkInitialConnection() async {
     try {
       final result = await Connectivity().checkConnectivity();
+      debugPrint('📡 Connectivité initiale vérifiée: $result');
       _handleConnectivityChange(result);
     } catch (e) {
-      debugPrint('Erreur lors de la vérification: $e');
-      _showNoInternetPage();
+      debugPrint('⚠️ Erreur lors de la vérification de connexion: $e');
+      // Sur Windows, on essaie de charger quand même
+      if (Platform.isWindows && mounted) {
+        _loadWebPage();
+      } else if (mounted) {
+        _showNoInternetPage();
+      }
     }
+  }
+
+  void _startPeriodicConnectivityCheck() {
+    Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      Connectivity().checkConnectivity().then((result) {
+        final connected = result != ConnectivityResult.none;
+        if (connected != _isConnected) {
+          _isConnected = connected;
+          _handleConnectivityChange(result);
+        }
+      });
+    });
   }
 
   void _handleConnectivityChange(ConnectivityResult result) {
     final bool connected = result != ConnectivityResult.none;
 
+    _isConnected = connected;
+    debugPrint(
+      '🔄 Changement de connexion détecté: $connected (résultat: $result)',
+    );
+
     if (connected) {
-      debugPrint('Connexion établie');
+      debugPrint('✅ Connexion établie');
       _loadWebPage();
     } else {
-      debugPrint('Pas de connexion internet');
-      _showNoInternetPage();
+      debugPrint('🚫 Pas de connexion internet');
+      if (mounted) {
+        _showNoInternetPage();
+      }
     }
   }
 
   void _loadWebPage() {
     if (_isInitialized) {
-      setState(() {
-        _isLoading = true;
-      });
+      debugPrint('⏳ Chargement de la page: $webUrl');
+      if (mounted) {
+        setState(() {
+          _isLoading = true;
+        });
+      }
       _webViewController.loadRequest(Uri.parse(webUrl));
+    } else {
+      debugPrint('⚠️ WebView non initialisé');
     }
   }
 
@@ -137,9 +213,11 @@ class _WebViewPageState extends State<WebViewPage> {
 
   void _showNoInternetPage() {
     if (_isInitialized) {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
       const String htmlContent = '''
         <!DOCTYPE html>
         <html>
@@ -212,20 +290,7 @@ class _WebViewPageState extends State<WebViewPage> {
             <h1>Pas de Connexion Internet</h1>
             <p>Vérifiez votre connexion réseau et réessayez.</p>
             <button class="button retry-button" onclick="location.reload()">Réessayer</button>
-            <button class="button" onclick="window.flutter_inappwebview.callHandler('refreshApp')">Actualiser l'App</button>
           </div>
-          <script>
-            function checkConnection() {
-              location.reload();
-            }
-            
-            // Écouter les messages de l'app Flutter
-            window.addEventListener('flutter_inappwebview', function(event) {
-              if (event.detail && event.detail.type === 'refreshApp') {
-                location.reload();
-              }
-            });
-          </script>
         </body>
         </html>
       ''';
@@ -235,9 +300,11 @@ class _WebViewPageState extends State<WebViewPage> {
 
   void _showErrorPage(String errorMessage) {
     if (_isInitialized) {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
       final String htmlContent = '''
         <!DOCTYPE html>
         <html>
@@ -290,6 +357,7 @@ class _WebViewPageState extends State<WebViewPage> {
               font-family: monospace;
               font-size: 14px;
               color: #dc3545;
+              word-break: break-all;
             }
             .button {
               background: #667eea;
@@ -320,14 +388,9 @@ class _WebViewPageState extends State<WebViewPage> {
             <p>Une erreur s'est produite lors du chargement de la page.</p>
             <div class="error-details" id="errorDetails">Chargement des détails...</div>
             <button class="button retry-button" onclick="location.reload()">Réessayer</button>
-            <button class="button" onclick="window.flutter_inappwebview.callHandler('refreshApp')">Actualiser l'App</button>
           </div>
           <script>
             document.getElementById('errorDetails').textContent = 'ERROR_MESSAGE_PLACEHOLDER';
-            
-            function checkConnection() {
-              location.reload();
-            }
           </script>
         </body>
         </html>
@@ -349,31 +412,6 @@ class _WebViewPageState extends State<WebViewPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Gestion Web'),
-        elevation: 0,
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _refreshPage,
-            tooltip: 'Actualiser',
-          ),
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              ),
-            ),
-        ],
-      ),
       body: !_isInitialized
           ? const Center(
               child: Column(
