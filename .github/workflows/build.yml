@@ -3,7 +3,7 @@ name: Build Flutter Windows
 on:
   push:
     tags:
-      - "v*"
+      - 'v*'
     branches:
       - main
       - develop
@@ -24,8 +24,8 @@ jobs:
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.35.6"
-          channel: "stable"
+          flutter-version: '3.35.6'
+          channel: 'stable'
 
       # Configuration Windows
       - name: Enable Windows desktop support
@@ -43,29 +43,35 @@ jobs:
       - name: Build Windows app
         run: flutter build windows --release
 
-      # Upload artifactt
+      # Debug - Lister les fichiers générés
+      - name: List build files
+        run: |
+          dir build
+          dir build/windows
+          dir build/windows/runner
+          dir build/windows/runner/Release
+
+      # Upload artifact
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: flutter-windows-build
-          path: build/windows/runner/Release/
+          path: build/windows/runner/Release/gestion_web.exe
+
+      # Copier l'exe pour la release
+      - name: Copy exe for release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          mkdir release-files
+          copy "build/windows/runner/Release/gestion_web.exe" "release-files/gestion_web.exe"
+          dir release-files
 
       # Créer une release (si c'est un tag)
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: build/windows/runner/Release/**/*
+          files: release-files/gestion_web.exe
           draft: false
           prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Uploader l'exe uniquement
-      - name: Upload EXE to Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: build/windows/runner/Release/gestion_web.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
