@@ -3,7 +3,7 @@ name: Build Flutter Windows
 on:
   push:
     tags:
-      - "v*"
+      - 'v*'
     branches:
       - main
       - develop
@@ -24,8 +24,8 @@ jobs:
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.35.6"
-          channel: "stable"
+          flutter-version: '3.35.6'
+          channel: 'stable'
 
       # Configuration Windows
       - name: Enable Windows desktop support
@@ -49,7 +49,7 @@ jobs:
           dir build
           dir build/windows
           dir build/windows/x64
-          dir build/windows/x64/Release
+          dir build/windows/x64/runner
 
       # Upload artifact
       - name: Upload build artifacts
