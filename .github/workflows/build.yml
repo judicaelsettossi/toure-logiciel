@@ -3,7 +3,7 @@ name: Build Flutter Windows
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
     branches:
       - main
       - develop
@@ -24,8 +24,8 @@ jobs:
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.35.6'
-          channel: 'stable'
+          flutter-version: "3.35.6"
+          channel: "stable"
 
       # Configuration Windows
       - name: Enable Windows desktop support
@@ -42,18 +42,6 @@ jobs:
       # Builder l'exe
       - name: Build Windows app
         run: flutter build windows --release
-
-      # Créer un dossier avec tous les fichiers nécessaires
-      - name: Create distribution folder
-        run: |
-          mkdir -p build/windows/runner/Release
-          xcopy build\windows\runner\Release build\windows\runner\Release-dist /E /I /Y
-
-      # Zipper l'application
-      - name: Create ZIP file
-        run: |
-          cd build\windows\runner\Release
-          powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory('$PWD', '$PWD\app.zip')"
 
       # Upload artifact
       - name: Upload build artifacts
